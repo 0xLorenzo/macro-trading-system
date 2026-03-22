@@ -2,11 +2,11 @@ import streamlit as st
 import pandas as pd
 import requests
 
-st.set_page_config(page_title="Macro Trading System", layout="wide")
+st.set_page_config(page_title="宏观交易系统", layout="wide")
 
-st.title("🌍 AI Macro Trading System")
+st.title("🌍 AI 宏观交易系统")
 
-# ===== DATA =====
+# ===== 数据获取 =====
 @st.cache_data(ttl=3600)
 def get_btc_price():
     url = "https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd"
@@ -17,9 +17,9 @@ oil_price = 90
 dxy = 102
 btc_vol = 60
 
-rate = st.selectbox("Fed Policy", ["Hawkish", "Neutral", "Dovish"])
+rate = st.selectbox("美联储政策", ["鹰派", "中性", "鸽派"])
 
-# ===== MODEL =====
+# ===== 模型计算 =====
 def model(oil, dxy, fed, vol):
     gold, stocks, btc, cash = 25, 40, 20, 15
 
@@ -27,33 +27,24 @@ def model(oil, dxy, fed, vol):
         gold += 10; stocks -= 10
     if dxy > 105:
         btc -= 5; cash += 5
-    if fed == "Dovish":
+    if fed == "鸽派":
         stocks += 5; btc += 5; cash -= 10
     if vol > 80:
         btc += 5; cash -= 5
 
     total = gold+stocks+btc+cash
     return {
-        "Gold": gold/total*100,
-        "Stocks": stocks/total*100,
+        "黄金": gold/total*100,
+        "美股": stocks/total*100,
         "BTC": btc/total*100,
-        "Cash": cash/total*100
+        "现金": cash/total*100
     }
 
 alloc = model(oil_price, dxy, rate, btc_vol)
 
-# ===== UI =====
-st.subheader("📊 Allocation")
-df = pd.DataFrame(alloc.items(), columns=["Asset","%"])
-st.bar_chart(df.set_index("Asset"))
+# ===== 界面显示 =====
+st.subheader("📊 资产配置")
+df = pd.DataFrame(alloc.items(), columns=["资产", "%"])
+st.bar_chart(df.set_index("资产"))
 
-st.subheader("📡 Market")
-st.write(f"BTC Price: ${btc_price}")
-
-st.subheader("🧠 Strategy")
-if oil_price > 110:
-    st.write("⚠️ Increase Gold")
-if dxy > 105:
-    st.write("💵 Strong USD")
-if rate == "Dovish":
-    st.write("📈 Bullish risk assets")
+st.subheader("�
