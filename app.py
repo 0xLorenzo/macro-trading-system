@@ -18,17 +18,18 @@ st.markdown("""
 def get_sp500_history():
     try:
         import yfinance as yf
-        df = yf.download("SPY", period="3mo")
-        if df.empty or "Adj Close" not in df.columns:
-            st.error("Yahoo Finance 返回空数据或无 'Adj Close' 列")
+        df = yf.download("SPY", period="6mo")
+        if df.empty:
+            st.warning("SPY 返回空数据，尝试 ^GSPC")
+            df = yf.download("^GSPC", period="6mo")
+        if df.empty:
+            st.error("Yahoo Finance SP500 返回空数据")
             return pd.DataFrame()
-        df = df[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
+        col = "Adj Close" if "Adj Close" in df.columns else "Close"
+        df = df[[col]].rename(columns={col:"SPY"})
         return df
-    except ModuleNotFoundError:
-        st.error("yfinance 未安装，无法获取 SP500 数据")
-        return pd.DataFrame()
     except Exception as e:
-        st.error(f"Yahoo Finance 获取 SP500 失败: {e}")
+        st.error(f"Yahoo Finance SP500 获取失败: {e}")
         return pd.DataFrame()
 
 sp500_hist = get_sp500_history()
@@ -38,11 +39,12 @@ sp500_hist = get_sp500_history()
 def get_gold_history():
     try:
         import yfinance as yf
-        df = yf.download("GC=F", period="3mo")  # 黄金期货
-        if df.empty or "Adj Close" not in df.columns:
-            st.error("Yahoo Finance 黄金数据为空或无 'Adj Close' 列")
+        df = yf.download("GC=F", period="6mo")  # 黄金期货
+        if df.empty:
+            st.error("Yahoo Finance 黄金数据为空")
             return pd.DataFrame()
-        df = df[["Adj Close"]].rename(columns={"Adj Close":"XAUUSD"})
+        col = "Adj Close" if "Adj Close" in df.columns else "Close"
+        df = df[[col]].rename(columns={col:"XAUUSD"})
         return df
     except Exception as e:
         st.error(f"Yahoo Finance 获取黄金失败: {e}")
@@ -54,7 +56,7 @@ gold_hist = get_gold_history()
 @st.cache_data(ttl=3600)
 def get_btc_history():
     try:
-        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=90"
+        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=180"
         data = requests.get(url).json()
         prices = pd.DataFrame(data["prices"], columns=["timestamp", "BTC"])
         prices["date"] = pd.to_datetime(prices["timestamp"], unit='ms')
