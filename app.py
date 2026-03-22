@@ -5,13 +5,12 @@ import requests
 import plotly.express as px
 import plotly.graph_objects as go
 
-st.set_page_config(page_title="宏观交易系统 V11", layout="wide")
+st.set_page_config(page_title="宏观交易系统 V12", layout="wide")
 
 # ---------- 顶部 ----------
 st.markdown("""
 <div style="background-color:#8B8C89;padding:12px;border-radius:6px;text-align:center;color:white">
-<h1>🌌 宏观交易策略系统 V11</h1>
-<p>紧凑扁平设计+莫兰迪风+未来感，可视化资产配置与策略逻辑</p>
+<h1>🌌 宏观交易策略系统 V12</h1>
 </div>
 """, unsafe_allow_html=True)
 
@@ -70,43 +69,47 @@ def get_fedwatch_prob():
 
 fed_prob = get_fedwatch_prob()
 
-# ---------- 三栏布局 ----------
+# ---------- 布局：三栏 ----------
 col1, col2, col3 = st.columns([1,2,1])
 
-# 左侧：行情+Fed概率
+# 左侧：最新行情 + FedWatch
 with col1:
-    st.subheader("📈 最新行情")
+    st.subheader("📈 最新市场行情")
     st.metric("SP500 (SPY)", latest_sp500)
     st.metric("黄金 (XAU/USD)", latest_gold)
     st.metric("BTC", latest_btc)
+    
     st.subheader("📊 FedWatch 实时概率")
-    st.bar_chart(pd.DataFrame(fed_prob.items(), columns=["事件","概率 (%)"]).set_index("事件"))
+    st.table(pd.DataFrame(fed_prob.items(), columns=["事件","概率 (%)"]).set_index("事件"))
 
-# 中间：历史趋势对数图
+# 中间：历史趋势对数
 with col2:
     st.subheader("📊 历史趋势对比（对数指标）")
     series_list = []
-    if not sp500_hist.empty:
-        s = sp500_hist["SP500"].copy()
-        s.name = "SP500"
-        series_list.append(s)
-    if not gold_hist.empty:
-        s = gold_hist["黄金"].copy()
-        s.name = "黄金"
-        series_list.append(s)
-    if not btc_hist.empty:
-        s = btc_hist["BTC"].copy()
-        s.name = "BTC"
-        series_list.append(s)
-    
+    if not sp500_hist.empty: 
+        s = sp500_hist["SP500"].copy(); s.name="SP500"; series_list.append(s)
+    if not gold_hist.empty: 
+        s = gold_hist["黄金"].copy(); s.name="黄金"; series_list.append(s)
+    if not btc_hist.empty: 
+        s = btc_hist["BTC"].copy(); s.name="BTC"; series_list.append(s)
+
     if series_list:
         chart_df = pd.concat(series_list, axis=1).dropna()
         chart_df_log = np.log(chart_df)
-        colors = ["#8E7D6B","#7D8E7D","#7D7D8E"]
         fig = px.line(chart_df_log, x=chart_df_log.index, y=chart_df_log.columns,
                       labels={"value":"对数价格","date":"日期"},
                       title="近6个月历史趋势（对数指标）",
-                      color_discrete_sequence=colors)
+                      color_discrete_sequence=["#8E7D6B","#7D8E7D","#7D7D8E"])
+        # 标示高低点
+        for col_name in chart_df_log.columns:
+            high_idx = chart_df_log[col_name].idxmax()
+            low_idx = chart_df_log[col_name].idxmin()
+            fig.add_scatter(x=[high_idx], y=[chart_df_log[col_name].max()],
+                            mode="markers+text", text="高点", textposition="top center",
+                            marker=dict(color="red", size=10))
+            fig.add_scatter(x=[low_idx], y=[chart_df_log[col_name].min()],
+                            mode="markers+text", text="低点", textposition="bottom center",
+                            marker=dict(color="blue", size=10))
         st.plotly_chart(fig, use_container_width=True)
         st.download_button("📥 下载历史行情 CSV", chart_df.reset_index().to_csv(index=False).encode('utf-8'), "market_history.csv")
     else:
@@ -141,16 +144,25 @@ with col3:
     st.plotly_chart(fig_pie, use_container_width=True)
     st.table(df_alloc)
 
-# 下方：策略逻辑
+# 下方：策略逻辑与数据交互
 st.subheader("📖 策略逻辑与数据交互")
 st.markdown(f"""
-- **黄金**：过去 3 个月均值 ± 1 标准差 (最新 {latest_gold})  
-- **SP500**：过去 3 个月均值 ± 1 标准差 (最新 {latest_sp500})  
-- **BTC**：根据 FedWatch 实时概率 + 波动性微调 (最新 {latest_btc})  
-- **现金**：保持 15% 流动性  
-- **策略逻辑**：
-    - 价格超过阈值 → 调整资产比例
-    - Fed概率高 → 微调股票/黄金/BTC比例
+- **黄金 (XAU/USD)**：参考过去3个月均值 ± 1 标准差 (最新 {latest_gold})  
+  - 若价格高于上阈值 → 增加黄金配置，减少股票配置  
+  - 若价格低于下阈值 → 减少黄金配置，增加股票或现金
+
+- **SP500 (SPY)**：参考过去3个月均值 ± 1 标准差 (最新 {latest_sp500})  
+  - 若价格高于上阈值 → 增加股票配置，减少黄金配置  
+  - 若价格低于下阈值 → 减少股票配置，增加现金或黄金
+
+- **BTC**：根据 FedWatch 实时概率微调  
+  - 降息概率高 → 股票与 BTC 增加  
+  - 加息概率高 → 黄金增加，股票减少
+
+- **现金**：保持流动性 15%  
+
+- **FedWatch 实时概率**：CME Fed Fund Futures 模拟，决定宏观政策预期  
+- **策略逻辑**：历史价格 + Fed概率 → 动态资产配置  
 - **数据来源**：
     - SP500: Yahoo Finance SPY ETF
     - 黄金: Yahoo Finance GC=F
