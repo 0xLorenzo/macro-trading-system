@@ -2,7 +2,6 @@ import streamlit as st
 import pandas as pd
 import requests
 import numpy as np
-import os
 
 st.set_page_config(page_title="宏观交易系统 V7 全稳定版", layout="wide")
 
@@ -74,7 +73,7 @@ latest_spy = sp500_hist["SPY"].iloc[-1] if not sp500_hist.empty else None
 latest_gold = gold_hist["XAUUSD"].iloc[-1] if not gold_hist.empty else None
 latest_btc = btc_hist["BTC"].iloc[-1] if not btc_hist.empty else None
 
-# ---------- 美联储自动信号 ----------
+# ---------- 美联储随机信号 ----------
 @st.cache_data(ttl=3600)
 def get_fedwatch_signal():
     import random
@@ -100,17 +99,30 @@ with col1:
 
 with col2:
     st.subheader("📊 历史趋势对比")
-    chart_df = pd.concat([
-        sp500_hist["SPY"].rename("SP500") if not sp500_hist.empty else pd.Series(),
-        gold_hist["XAUUSD"].rename("黄金") if not gold_hist.empty else pd.Series(),
-        btc_hist["BTC"].rename("BTC") if not btc_hist.empty else pd.Series()
-    ], axis=1).dropna()
-    st.line_chart(chart_df)
+    series_list = []
 
-# 下载 CSV
-if not chart_df.empty:
-    download_csv = chart_df.reset_index().to_csv(index=False).encode('utf-8')
-    st.download_button("📥 下载历史行情 CSV", download_csv, "market_history.csv")
+    if not sp500_hist.empty:
+        s = sp500_hist["SPY"].copy()
+        s.name = "SP500"
+        series_list.append(s)
+
+    if not gold_hist.empty:
+        s = gold_hist["XAUUSD"].copy()
+        s.name = "黄金"
+        series_list.append(s)
+
+    if not btc_hist.empty:
+        s = btc_hist["BTC"].copy()
+        s.name = "BTC"
+        series_list.append(s)
+
+    if series_list:
+        chart_df = pd.concat(series_list, axis=1)
+        st.line_chart(chart_df)
+        download_csv = chart_df.reset_index().to_csv(index=False).encode('utf-8')
+        st.download_button("📥 下载历史行情 CSV", download_csv, "market_history.csv")
+    else:
+        st.warning("没有可用历史数据显示折线图")
 
 # ---------- 资产配置策略 ----------
 def alloc_model(o, dxy, fed, btc_vol):
