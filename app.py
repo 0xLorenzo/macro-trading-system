@@ -3,13 +3,14 @@ import pandas as pd
 import numpy as np
 import requests
 
-st.set_page_config(page_title="宏观交易系统 V7 全稳定版", layout="wide")
+st.set_page_config(page_title="宏观交易系统 V7 美化版", layout="wide")
 
+# ---------- 顶部 Banner ----------
 st.markdown("""
-<h1 style='text-align:center;color:#1E3A8A;'>🌍 AI 宏观交易策略系统 V7</h1>
-<p style='text-align:center;color:#555;font-size:14px;'>
-自动获取美股/黄金/BTC历史行情、生成策略及趋势分析（不依赖 Alpha Vantage）。
-</p>
+<div style="background-color:#1E3A8A;padding:15px;border-radius:8px;text-align:center;color:white">
+<h1>🌍 宏观交易策略系统 V7</h1>
+<p>实时获取 SP500、黄金、BTC 历史数据，生成资产配置策略。</p>
+</div>
 """, unsafe_allow_html=True)
 
 # ---------- 获取 SP500 历史数据 ----------
@@ -19,16 +20,12 @@ def get_sp500_history():
         import yfinance as yf
         df = yf.download("SPY", period="6mo")
         if df.empty:
-            st.warning("SPY 返回空数据，尝试 ^GSPC")
             df = yf.download("^GSPC", period="6mo")
         if df.empty:
-            st.error("Yahoo Finance SP500 返回空数据")
             return pd.DataFrame()
         col = "Adj Close" if "Adj Close" in df.columns else "Close"
-        df = df[[col]].rename(columns={col:"SPY"})
-        return df
-    except Exception as e:
-        st.error(f"Yahoo Finance SP500 获取失败: {e}")
+        return df[[col]].rename(columns={col:"SPY"})
+    except:
         return pd.DataFrame()
 
 sp500_hist = get_sp500_history()
@@ -40,13 +37,10 @@ def get_gold_history():
         import yfinance as yf
         df = yf.download("GC=F", period="6mo")
         if df.empty:
-            st.error("Yahoo Finance 黄金数据为空")
             return pd.DataFrame()
         col = "Adj Close" if "Adj Close" in df.columns else "Close"
-        df = df[[col]].rename(columns={col:"XAUUSD"})
-        return df
-    except Exception as e:
-        st.error(f"Yahoo Finance 获取黄金失败: {e}")
+        return df[[col]].rename(columns={col:"XAUUSD"})
+    except:
         return pd.DataFrame()
 
 gold_hist = get_gold_history()
@@ -57,28 +51,24 @@ def get_btc_history():
     try:
         url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=180"
         data = requests.get(url).json()
-        prices = pd.DataFrame(data["prices"], columns=["timestamp", "BTC"])
+        prices = pd.DataFrame(data["prices"], columns=["timestamp","BTC"])
         prices["date"] = pd.to_datetime(prices["timestamp"], unit='ms')
         prices = prices.set_index("date")
         prices["BTC"] = prices["BTC"].astype(float)
         return prices[["BTC"]]
-    except Exception as e:
-        st.error(f"获取 BTC 数据失败: {e}")
+    except:
         return pd.DataFrame()
 
 btc_hist = get_btc_history()
 
 # ---------- 安全获取最新价格 ----------
 def safe_latest(df, col_name):
-    """返回单一 float 值，如果为空或 NaN 返回 None"""
     if df.empty or col_name not in df.columns:
         return None
     val = df[col_name].iloc[-1]
     try:
         val = float(val)
-        if np.isnan(val):
-            return None
-        return val
+        return None if np.isnan(val) else val
     except:
         return None
 
@@ -86,7 +76,7 @@ latest_spy = safe_latest(sp500_hist, "SPY")
 latest_gold = safe_latest(gold_hist, "XAUUSD")
 latest_btc = safe_latest(btc_hist, "BTC")
 
-# ---------- 美联储随机信号 ----------
+# ---------- 美联储信号模拟 ----------
 @st.cache_data(ttl=3600)
 def get_fedwatch_signal():
     import random
@@ -100,30 +90,31 @@ def get_fedwatch_signal():
 
 fed_signal = get_fedwatch_signal()
 
-# ---------- 界面显示 ----------
-col1, col2 = st.columns(2)
+# ---------- 左右布局 ----------
+col1, col2 = st.columns([1,2])
 
 with col1:
     st.subheader("📈 最新市场行情")
-    st.write(f"**SP500 (SPY) 最新价:** {latest_spy}")
-    st.write(f"**黄金 (XAU/USD) 最新价:** {latest_gold}")
-    st.write(f"**BTC 最新价:** {latest_btc}")
-    st.write(f"**美联储信号:** {fed_signal}")
+    st.metric("SP500 (SPY)", latest_spy)
+    st.caption("数据来源：Yahoo Finance SPY ETF 近 6 个月价格")
+    st.metric("黄金 (XAU/USD)", latest_gold)
+    st.caption("数据来源：Yahoo Finance 黄金期货 GC=F")
+    st.metric("BTC", latest_btc)
+    st.caption("数据来源：CoinGecko API, BTC/USD")
+    st.metric("美联储信号", fed_signal)
+    st.caption("随机模拟信号，可升级为 CME FedWatch 实时概率")
 
 with col2:
     st.subheader("📊 历史趋势对比")
     series_list = []
-
     if not sp500_hist.empty:
         s = sp500_hist["SPY"].copy()
         s.name = "SP500"
         series_list.append(s)
-
     if not gold_hist.empty:
         s = gold_hist["XAUUSD"].copy()
         s.name = "黄金"
         series_list.append(s)
-
     if not btc_hist.empty:
         s = btc_hist["BTC"].copy()
         s.name = "BTC"
@@ -132,10 +123,9 @@ with col2:
     if series_list:
         chart_df = pd.concat(series_list, axis=1)
         st.line_chart(chart_df)
-
-        # 下载 CSV
         download_csv = chart_df.reset_index().to_csv(index=False).encode('utf-8')
         st.download_button("📥 下载历史行情 CSV", download_csv, "market_history.csv")
+        st.caption("折线图显示近 6 个月 SP500、黄金、BTC 收盘价对比")
     else:
         st.warning("没有可用历史数据显示折线图")
 
@@ -146,16 +136,13 @@ def alloc_model(latest_gold_val, latest_spy_val, fed_signal, btc_vol):
     btc = 20
     cash = 15
 
-    # 仅在值存在时才做比较
-    if latest_gold_val is not None:
-        if latest_gold_val > 1800:
-            gold += 5
-            stocks -= 5
+    if latest_gold_val is not None and latest_gold_val > 1800:
+        gold += 5
+        stocks -= 5
 
-    if latest_spy_val is not None:
-        if latest_spy_val > 450:
-            stocks += 5
-            gold -= 5
+    if latest_spy_val is not None and latest_spy_val > 450:
+        stocks += 5
+        gold -= 5
 
     if fed_signal == "鸽派":
         stocks += 5
@@ -172,3 +159,16 @@ st.subheader("📊 建议资产配置")
 df_alloc = pd.DataFrame(alloc.items(), columns=["资产","比例"])
 st.bar_chart(df_alloc.set_index("资产"))
 st.table(df_alloc)
+
+with st.expander("策略细节与逻辑说明"):
+    st.markdown("""
+- **黄金**：如果价格 > 1800 USD，增加黄金配置，减少股票。  
+- **SP500**：如果价格 > 450 点，增加股票配置，减少黄金。  
+- **美联储信号**：鸽派增加股票/BTC，鹰派增加黄金。  
+- **现金**：保持 15% 流动性。  
+- **数据来源**：
+    - SP500: Yahoo Finance SPY ETF
+    - 黄金: Yahoo Finance GC=F
+    - BTC: CoinGecko API
+    - 美联储信号: 随机模拟
+""")
