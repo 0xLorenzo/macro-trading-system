@@ -24,20 +24,25 @@ def model(oil, dxy, fed, vol):
     gold, stocks, btc, cash = 25, 40, 20, 15
 
     if oil > 110:
-        gold += 10; stocks -= 10
+        gold += 10
+        stocks -= 10
     if dxy > 105:
-        btc -= 5; cash += 5
+        btc -= 5
+        cash += 5
     if fed == "鸽派":
-        stocks += 5; btc += 5; cash -= 10
+        stocks += 5
+        btc += 5
+        cash -= 10
     if vol > 80:
-        btc += 5; cash -= 5
+        btc += 5
+        cash -= 5
 
-    total = gold+stocks+btc+cash
+    total = gold + stocks + btc + cash
     return {
-        "黄金": gold/total*100,
-        "美股": stocks/total*100,
-        "BTC": btc/total*100,
-        "现金": cash/total*100
+        "黄金": gold / total * 100,
+        "美股": stocks / total * 100,
+        "BTC": btc / total * 100,
+        "现金": cash / total * 100
     }
 
 alloc = model(oil_price, dxy, rate, btc_vol)
@@ -47,4 +52,13 @@ st.subheader("📊 资产配置")
 df = pd.DataFrame(alloc.items(), columns=["资产", "%"])
 st.bar_chart(df.set_index("资产"))
 
-st.subheader("�
+st.subheader("📡 市场信息")
+st.write(f"BTC价格: ${btc_price}")
+
+st.subheader("🧠 策略提示")
+if oil_price > 110:
+    st.write("⚠️ 战争风险高，建议增加黄金仓位")
+if dxy > 105:
+    st.write("💵 美元走强，风险资产承压")
+if rate == "鸽派":
+    st.write("📈 流动性宽松，利好BTC和科技股")
