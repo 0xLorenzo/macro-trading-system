@@ -4,49 +4,49 @@ import numpy as np
 import requests
 import plotly.express as px
 import plotly.graph_objects as go
+import time
 
-st.set_page_config(page_title="宏观交易系统 V13", layout="wide")
+st.set_page_config(page_title="宏观交易系统 V14", layout="wide")
 
 # ---------- 顶部 ----------
 st.markdown("""
 <div style="background-color:#8B8C89;padding:12px;border-radius:6px;text-align:center;color:white">
-<h1>🌌 宏观交易策略系统 V13</h1>
-<p>DZ</p>
+<h1>🌌 宏观交易策略系统 V14</h1>
+<p>GDZ</p>
 </div>
 """, unsafe_allow_html=True)
 
-# ---------- 获取行情 ----------
+# ---------- 数据获取函数 ----------
 @st.cache_data(ttl=1800)
-def get_data_yf(ticker, colname, period="6mo"):
-    try:
-        import yfinance as yf
-        df = yf.download(ticker, period=period)
-        if df.empty:
-            return pd.DataFrame()
-        col = "Adj Close" if "Adj Close" in df.columns else "Close"
-        df = df[[col]].rename(columns={col: colname})
-        return df
-    except:
-        return pd.DataFrame()
+def fetch_yf_retry(ticker, colname, period="6mo", retries=3, delay=2):
+    import yfinance as yf
+    for i in range(retries):
+        try:
+            df = yf.download(ticker, period=period)
+            if not df.empty:
+                col = "Adj Close" if "Adj Close" in df.columns else "Close"
+                df = df[[col]].rename(columns={col: colname})
+                return df
+        except:
+            time.sleep(delay)
+    return pd.DataFrame()
 
 @st.cache_data(ttl=1800)
-def get_btc_history():
-    try:
-        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=180"
-        data = requests.get(url).json()
-        df = pd.DataFrame(data["prices"], columns=["timestamp","BTC"])
-        df["date"] = pd.to_datetime(df["timestamp"], unit='ms')
-        df = df.set_index("date")[["BTC"]]
-        df["BTC"] = df["BTC"].astype(float)
-        return df
-    except:
-        return pd.DataFrame()
+def fetch_btc_retry(days=180, retries=3, delay=2):
+    for i in range(retries):
+        try:
+            url = f"https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days={days}"
+            data = requests.get(url, timeout=10).json()
+            df = pd.DataFrame(data["prices"], columns=["timestamp","BTC"])
+            df["date"] = pd.to_datetime(df["timestamp"], unit='ms')
+            df = df.set_index("date")[["BTC"]]
+            df["BTC"] = df["BTC"].astype(float)
+            return df
+        except:
+            time.sleep(delay)
+    return pd.DataFrame()
 
-sp500_hist = get_data_yf("SPY", "SP500")
-gold_hist = get_data_yf("GC=F", "黄金")
-btc_hist = get_btc_history()
-
-# ---------- 最新价格 ----------
+@st.cache_data(ttl=1800)
 def safe_latest(df, col):
     if df.empty or col not in df.columns:
         return "数据不可用"
@@ -55,6 +55,11 @@ def safe_latest(df, col):
         return "数据不可用" if np.isnan(val) else round(float(val),2)
     except:
         return "数据不可用"
+
+# ---------- 数据下载 ----------
+sp500_hist = fetch_yf_retry("SPY", "SP500")
+gold_hist = fetch_yf_retry("GC=F", "黄金")
+btc_hist = fetch_btc_retry()
 
 latest_sp500 = safe_latest(sp500_hist, "SP500")
 latest_gold = safe_latest(gold_hist, "黄金")
@@ -70,24 +75,27 @@ def get_fedwatch_prob():
 
 fed_prob = get_fedwatch_prob()
 
-# ---------- 三栏布局 ----------
+# ---------- 页面布局 ----------
 col1, col2, col3 = st.columns([1,2,1])
 
-# ---------- 左侧：最新行情 + FedWatch ----------
+# 左侧：最新行情 + FedWatch
 with col1:
     st.subheader("📈 最新市场行情")
     st.metric("SP500 (SPY)", latest_sp500)
     st.metric("黄金 (XAU/USD)", latest_gold)
     st.metric("BTC", latest_btc)
 
+    if latest_sp500 == "数据不可用": st.warning("SP500 数据暂时不可用")
+    if latest_gold == "数据不可用": st.warning("黄金 数据暂时不可用")
+    if latest_btc == "数据不可用": st.warning("BTC 数据暂时不可用")
+
     st.subheader("📊 FedWatch 实时概率")
     st.table(pd.DataFrame(fed_prob.items(), columns=["事件","概率 (%)"]).set_index("事件"))
 
-# ---------- 中间：历史趋势对数 ----------
+# 中间：历史趋势对数
 with col2:
     st.subheader("📊 历史趋势对比（对数指标）")
     series_list = []
-
     def add_series_safe(df, colname):
         if not df.empty and colname in df.columns:
             s = df[colname].copy()
@@ -105,7 +113,7 @@ with col2:
                       labels={"value":"对数价格","date":"日期"},
                       title="近6个月历史趋势（对数指标）",
                       color_discrete_sequence=["#8E7D6B","#7D8E7D","#7D7D8E"])
-        # 标示高低点
+        # 高低点标记
         for col_name in chart_df_log.columns:
             high_idx = chart_df_log[col_name].idxmax()
             low_idx = chart_df_log[col_name].idxmin()
@@ -118,9 +126,9 @@ with col2:
         st.plotly_chart(fig, use_container_width=True)
         st.download_button("📥 下载历史行情 CSV", chart_df.reset_index().to_csv(index=False).encode('utf-8'), "market_history.csv")
     else:
-        st.warning("没有可用历史数据显示折线图")
+        st.warning("没有可用历史数据绘制对数图")
 
-# ---------- 右侧：资产配置饼图 ----------
+# 右侧：资产配置饼图
 with col3:
     st.subheader("📊 建议资产配置")
     def alloc_model(latest_gold_val, latest_sp500_val, fed_prob):
@@ -149,7 +157,7 @@ with col3:
     st.plotly_chart(fig_pie, use_container_width=True)
     st.table(df_alloc)
 
-# ---------- 下方：策略逻辑与数据交互 ----------
+# 下方：策略逻辑与数据交互
 st.subheader("📖 策略逻辑与数据交互")
 st.markdown(f"""
 - **黄金 (XAU/USD)**：参考过去3个月均值 ± 1 标准差 (最新 {latest_gold})  
