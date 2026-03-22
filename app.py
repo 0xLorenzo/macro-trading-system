@@ -24,29 +24,33 @@ def get_sp500_history():
     try:
         url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=SPY&apikey={ALPHA_KEY}"
         r = requests.get(url).json()
-        if "Time Series (Daily)" not in r:
-            st.warning("Alpha Vantage 数据不可用或超限，自动切换至 Yahoo Finance")
-            try:
-                import yfinance as yf
-                df = yf.download("SPY", period="3mo")[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
-                return df
-            except ModuleNotFoundError:
-                st.error("yfinance 未安装，无法 fallback 获取 SP500 数据")
-                return pd.DataFrame()
-        df = pd.DataFrame(r["Time Series (Daily)"]).T
-        df = df.rename(columns={"5. adjusted close":"SPY"})
-        df.index = pd.to_datetime(df.index)
-        df["SPY"] = df["SPY"].astype(float)
-        return df[["SPY"]]
+        ts = r.get("Time Series (Daily)")
+        if ts:
+            df = pd.DataFrame(ts).T
+            df = df.rename(columns={"5. adjusted close":"SPY"})
+            df.index = pd.to_datetime(df.index)
+            df["SPY"] = df["SPY"].astype(float)
+            return df[["SPY"]]
+        else:
+            st.warning("Alpha Vantage 数据不可用或超限，自动尝试 Yahoo Finance")
     except Exception as e:
-        st.warning(f"获取 SP500 数据失败: {e}, 自动切换至 Yahoo Finance")
-        try:
-            import yfinance as yf
-            df = yf.download("SPY", period="3mo")[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
-            return df
-        except ModuleNotFoundError:
-            st.error("yfinance 未安装，无法 fallback 获取 SP500 数据")
+        st.warning(f"Alpha Vantage 请求失败: {e}, 尝试 Yahoo Finance")
+
+    # fallback Yahoo Finance
+    try:
+        import yfinance as yf
+        df = yf.download("SPY", period="3mo")
+        if df.empty or "Adj Close" not in df.columns:
+            st.error("Yahoo Finance 返回空数据或无 'Adj Close' 列")
             return pd.DataFrame()
+        df = df[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
+        return df
+    except ModuleNotFoundError:
+        st.error("yfinance 未安装，无法 fallback 获取 SP500 数据")
+        return pd.DataFrame()
+    except Exception as e:
+        st.error(f"Yahoo Finance 获取失败: {e}")
+        return pd.DataFrame()
 
 sp500_hist = get_sp500_history()
 
@@ -56,13 +60,15 @@ def get_gold_history():
     try:
         url = f"https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=XAU&to_symbol=USD&apikey={ALPHA_KEY}"
         r = requests.get(url).json()
-        if "Time Series FX (Daily)" not in r:
+        ts = r.get("Time Series FX (Daily)")
+        if ts:
+            df = pd.DataFrame(ts).T
+            df.index = pd.to_datetime(df.index)
+            df["XAUUSD"] = df["4. close"].astype(float)
+            return df[["XAUUSD"]]
+        else:
             st.warning("Alpha Vantage 黄金数据不可用，使用 SPY 代替测试")
             return sp500_hist.copy().rename(columns={"SPY":"XAUUSD"})
-        df = pd.DataFrame(r["Time Series FX (Daily)"]).T
-        df.index = pd.to_datetime(df.index)
-        df["XAUUSD"] = df["4. close"].astype(float)
-        return df[["XAUUSD"]]
     except:
         st.warning("获取黄金数据失败，使用 SPY 代替")
         return sp500_hist.copy().rename(columns={"SPY":"XAUUSD"})
@@ -72,13 +78,17 @@ gold_hist = get_gold_history()
 # ---------- 获取 BTC 历史数据 ----------
 @st.cache_data(ttl=3600)
 def get_btc_history():
-    url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=90"
-    data = requests.get(url).json()
-    prices = pd.DataFrame(data["prices"], columns=["timestamp", "BTC"])
-    prices["date"] = pd.to_datetime(prices["timestamp"], unit='ms')
-    prices = prices.set_index("date")
-    prices["BTC"] = prices["BTC"].astype(float)
-    return prices[["BTC"]]
+    try:
+        url = "https://api.coingecko.com/api/v3/coins/bitcoin/market_chart?vs_currency=usd&days=90"
+        data = requests.get(url).json()
+        prices = pd.DataFrame(data["prices"], columns=["timestamp", "BTC"])
+        prices["date"] = pd.to_datetime(prices["timestamp"], unit='ms')
+        prices = prices.set_index("date")
+        prices["BTC"] = prices["BTC"].astype(float)
+        return prices[["BTC"]]
+    except Exception as e:
+        st.error(f"获取 BTC 数据失败: {e}")
+        return pd.DataFrame()
 
 btc_hist = get_btc_history()
 
