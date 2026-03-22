@@ -136,7 +136,6 @@ def alloc_model(latest_gold_val, latest_sp500_val, fed_signal, btc_vol):
     btc = 20
     cash = 15
 
-    # 动态参考值 = 过去3个月均值 ± 1 标准差
     def dynamic_threshold(df):
         if df.empty:
             return None
@@ -147,18 +146,23 @@ def alloc_model(latest_gold_val, latest_sp500_val, fed_signal, btc_vol):
     gold_thresh = dynamic_threshold(gold_hist["黄金"]) if not gold_hist.empty else (1800,50)
     sp500_thresh = dynamic_threshold(sp500_hist["SP500"]) if not sp500_hist.empty else (450,20)
 
+    # ---------- 黄金动态调整 ----------
     if latest_gold_val is not None and gold_thresh is not None:
         mean, std = gold_thresh
-        if latest_gold_val > mean + std:
-            gold += 5
-            stocks -= 5
+        if mean is not None and std is not None:
+            if latest_gold_val > mean + std:
+                gold += 5
+                stocks -= 5
 
+    # ---------- SP500动态调整 ----------
     if latest_sp500_val is not None and sp500_thresh is not None:
         mean, std = sp500_thresh
-        if latest_sp500_val > mean + std:
-            stocks += 5
-            gold -= 5
+        if mean is not None and std is not None:
+            if latest_sp500_val > mean + std:
+                stocks += 5
+                gold -= 5
 
+    # ---------- 美联储信号调整 ----------
     if fed_signal == "鸽派":
         stocks += 5
         btc += 5
