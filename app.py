@@ -1,14 +1,14 @@
 import streamlit as st
 import pandas as pd
-import requests
 import numpy as np
+import requests
 
 st.set_page_config(page_title="宏观交易系统 V7 全稳定版", layout="wide")
 
 st.markdown("""
 <h1 style='text-align:center;color:#1E3A8A;'>🌍 AI 宏观交易策略系统 V7</h1>
 <p style='text-align:center;color:#555;font-size:14px;'>
-自动获取美股/黄金/BTC历史行情、自动生成策略及趋势分析（不依赖 Alpha Vantage）。
+自动获取美股/黄金/BTC历史行情、生成策略及趋势分析（不依赖 Alpha Vantage）。
 </p>
 """, unsafe_allow_html=True)
 
@@ -38,7 +38,7 @@ sp500_hist = get_sp500_history()
 def get_gold_history():
     try:
         import yfinance as yf
-        df = yf.download("GC=F", period="6mo")  # 黄金期货
+        df = yf.download("GC=F", period="6mo")
         if df.empty:
             st.error("Yahoo Finance 黄金数据为空")
             return pd.DataFrame()
@@ -92,9 +92,9 @@ col1, col2 = st.columns(2)
 
 with col1:
     st.subheader("📈 最新市场行情")
-    st.write(f"**SPY (标普500 近收):** {latest_spy}")
-    st.write(f"**XAU/USD (黄金近收):** {latest_gold}")
-    st.write(f"**BTC 价格:** {latest_btc}")
+    st.write(f"**SP500 (SPY) 最新价:** {latest_spy}")
+    st.write(f"**黄金 (XAU/USD) 最新价:** {latest_gold}")
+    st.write(f"**BTC 最新价:** {latest_btc}")
     st.write(f"**美联储信号:** {fed_signal}")
 
 with col2:
@@ -119,17 +119,34 @@ with col2:
     if series_list:
         chart_df = pd.concat(series_list, axis=1)
         st.line_chart(chart_df)
+
+        # 下载 CSV
         download_csv = chart_df.reset_index().to_csv(index=False).encode('utf-8')
         st.download_button("📥 下载历史行情 CSV", download_csv, "market_history.csv")
     else:
         st.warning("没有可用历史数据显示折线图")
 
-# ---------- 资产配置策略 ----------
-def alloc_model(o, dxy, fed, btc_vol):
-    gold = 25; stocks = 40; btc = 20; cash = 15
-    if o and o > latest_gold: gold += 5; stocks -= 5
-    if fed == "鸽派": stocks += 5; btc += 5
-    if fed == "鹰派": stocks -= 5; gold += 5
+# ---------- 安全资产配置策略 ----------
+def alloc_model(latest_gold_val, latest_spy_val, fed_signal, btc_vol):
+    gold = 25
+    stocks = 40
+    btc = 20
+    cash = 15
+
+    # 安全判断，避免 ValueError
+    if latest_gold_val is not None and not pd.isna(latest_gold_val):
+        # 简单示例：黄金价格高于1800微调
+        if latest_gold_val > 1800:
+            gold += 5
+            stocks -= 5
+
+    if fed_signal == "鸽派":
+        stocks += 5
+        btc += 5
+    elif fed_signal == "鹰派":
+        stocks -= 5
+        gold += 5
+
     return {"黄金": gold, "美股": stocks, "BTC": btc, "现金": cash}
 
 alloc = alloc_model(latest_gold, latest_spy, fed_signal, 0)
