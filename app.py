@@ -3,17 +3,17 @@ import pandas as pd
 import numpy as np
 import requests
 
-st.set_page_config(page_title="宏观交易系统 V7 美化版", layout="wide")
+st.set_page_config(page_title="宏观交易系统 V8 美化版", layout="wide")
 
 # ---------- 顶部 Banner ----------
 st.markdown("""
 <div style="background-color:#1E3A8A;padding:15px;border-radius:8px;text-align:center;color:white">
-<h1>🌍 宏观交易策略系统 V7</h1>
-<p>实时获取 SP500、黄金、BTC 历史数据，生成资产配置策略。</p>
+<h1>🌍 宏观交易策略系统 V8</h1>
+<p>实时获取 SP500、黄金、BTC 历史数据，生成动态资产配置策略。</p>
 </div>
 """, unsafe_allow_html=True)
 
-# ---------- 获取 SP500 历史数据 ----------
+# ---------- 获取数据 ----------
 @st.cache_data(ttl=3600)
 def get_sp500_history():
     try:
@@ -24,28 +24,23 @@ def get_sp500_history():
         if df.empty:
             return pd.DataFrame()
         col = "Adj Close" if "Adj Close" in df.columns else "Close"
-        return df[[col]].rename(columns={col:"SPY"})
+        return df[[col]].rename(columns={col:"SP500"})
     except:
         return pd.DataFrame()
 
-sp500_hist = get_sp500_history()
-
-# ---------- 获取黄金历史数据 ----------
 @st.cache_data(ttl=3600)
 def get_gold_history():
     try:
         import yfinance as yf
-        df = yf.download("GC=F", period="6mo")
+        df = yf.download("GC=F", period="6mo")  # 黄金期货
         if df.empty:
             return pd.DataFrame()
         col = "Adj Close" if "Adj Close" in df.columns else "Close"
-        return df[[col]].rename(columns={col:"XAUUSD"})
+        df = df[[col]].rename(columns={col:"黄金"})
+        return df
     except:
         return pd.DataFrame()
 
-gold_hist = get_gold_history()
-
-# ---------- 获取 BTC 历史数据 ----------
 @st.cache_data(ttl=3600)
 def get_btc_history():
     try:
@@ -59,6 +54,8 @@ def get_btc_history():
     except:
         return pd.DataFrame()
 
+sp500_hist = get_sp500_history()
+gold_hist = get_gold_history()
 btc_hist = get_btc_history()
 
 # ---------- 安全获取最新价格 ----------
@@ -68,15 +65,15 @@ def safe_latest(df, col_name):
     val = df[col_name].iloc[-1]
     try:
         val = float(val)
-        return None if np.isnan(val) else val
+        return None if np.isnan(val) else round(val, 2)  # 保留两位小数
     except:
         return None
 
-latest_spy = safe_latest(sp500_hist, "SPY")
-latest_gold = safe_latest(gold_hist, "XAUUSD")
+latest_sp500 = safe_latest(sp500_hist, "SP500")
+latest_gold = safe_latest(gold_hist, "黄金")
 latest_btc = safe_latest(btc_hist, "BTC")
 
-# ---------- 美联储信号模拟 ----------
+# ---------- 美联储随机信号 ----------
 @st.cache_data(ttl=3600)
 def get_fedwatch_signal():
     import random
@@ -95,7 +92,7 @@ col1, col2 = st.columns([1,2])
 
 with col1:
     st.subheader("📈 最新市场行情")
-    st.metric("SP500 (SPY)", latest_spy)
+    st.metric("SP500 (SPY)", latest_sp500)
     st.caption("数据来源：Yahoo Finance SPY ETF 近 6 个月价格")
     st.metric("黄金 (XAU/USD)", latest_gold)
     st.caption("数据来源：Yahoo Finance 黄金期货 GC=F")
@@ -108,20 +105,14 @@ with col2:
     st.subheader("📊 历史趋势对比")
     series_list = []
     if not sp500_hist.empty:
-        s = sp500_hist["SPY"].copy()
-        s.name = "SP500"
-        series_list.append(s)
+        series_list.append(sp500_hist["SP500"].copy().rename("SP500"))
     if not gold_hist.empty:
-        s = gold_hist["XAUUSD"].copy()
-        s.name = "黄金"
-        series_list.append(s)
+        series_list.append(gold_hist["黄金"].copy().rename("黄金"))
     if not btc_hist.empty:
-        s = btc_hist["BTC"].copy()
-        s.name = "BTC"
-        series_list.append(s)
+        series_list.append(btc_hist["BTC"].copy().rename("BTC"))
 
     if series_list:
-        chart_df = pd.concat(series_list, axis=1)
+        chart_df = pd.concat(series_list, axis=1).dropna()
         st.line_chart(chart_df)
         download_csv = chart_df.reset_index().to_csv(index=False).encode('utf-8')
         st.download_button("📥 下载历史行情 CSV", download_csv, "market_history.csv")
@@ -129,20 +120,35 @@ with col2:
     else:
         st.warning("没有可用历史数据显示折线图")
 
-# ---------- 安全资产配置策略 ----------
-def alloc_model(latest_gold_val, latest_spy_val, fed_signal, btc_vol):
+# ---------- 动态资产配置策略 ----------
+def alloc_model(latest_gold_val, latest_sp500_val, fed_signal, btc_vol):
     gold = 25
     stocks = 40
     btc = 20
     cash = 15
 
-    if latest_gold_val is not None and latest_gold_val > 1800:
-        gold += 5
-        stocks -= 5
+    # 动态参考值 = 过去3个月均值 ± 1 标准差
+    def dynamic_threshold(df):
+        if df.empty:
+            return None
+        mean_val = df.iloc[-60:].mean()
+        std_val = df.iloc[-60:].std()
+        return mean_val, std_val
 
-    if latest_spy_val is not None and latest_spy_val > 450:
-        stocks += 5
-        gold -= 5
+    gold_thresh = dynamic_threshold(gold_hist["黄金"]) if not gold_hist.empty else (1800,50)
+    sp500_thresh = dynamic_threshold(sp500_hist["SP500"]) if not sp500_hist.empty else (450,20)
+
+    if latest_gold_val is not None and gold_thresh is not None:
+        mean, std = gold_thresh
+        if latest_gold_val > mean + std:
+            gold += 5
+            stocks -= 5
+
+    if latest_sp500_val is not None and sp500_thresh is not None:
+        mean, std = sp500_thresh
+        if latest_sp500_val > mean + std:
+            stocks += 5
+            gold -= 5
 
     if fed_signal == "鸽派":
         stocks += 5
@@ -153,7 +159,7 @@ def alloc_model(latest_gold_val, latest_spy_val, fed_signal, btc_vol):
 
     return {"黄金": gold, "美股": stocks, "BTC": btc, "现金": cash}
 
-alloc = alloc_model(latest_gold, latest_spy, fed_signal, 0)
+alloc = alloc_model(latest_gold, latest_sp500, fed_signal, 0)
 
 st.subheader("📊 建议资产配置")
 df_alloc = pd.DataFrame(alloc.items(), columns=["资产","比例"])
@@ -161,14 +167,15 @@ st.bar_chart(df_alloc.set_index("资产"))
 st.table(df_alloc)
 
 with st.expander("策略细节与逻辑说明"):
-    st.markdown("""
-- **黄金**：如果价格 > 1800 USD，增加黄金配置，减少股票。  
-- **SP500**：如果价格 > 450 点，增加股票配置，减少黄金。  
-- **美联储信号**：鸽派增加股票/BTC，鹰派增加黄金。  
-- **现金**：保持 15% 流动性。  
+    st.markdown(f"""
+- **黄金**：动态参考值 = 过去 3 个月均值 ± 1 标准差 (最新值 {latest_gold})  
+- **SP500**：动态参考值 = 过去 3 个月均值 ± 1 标准差 (最新值 {latest_sp500})  
+- **BTC**：根据 Fed 信号 + 波动性微调配置 (最新值 {latest_btc})  
+- **美联储信号**：鸽派增加股票/BTC，鹰派增加黄金  
+- **现金**：保持 15% 流动性  
 - **数据来源**：
     - SP500: Yahoo Finance SPY ETF
-    - 黄金: Yahoo Finance GC=F
+    - 黄金: Yahoo Finance 黄金期货 GC=F
     - BTC: CoinGecko API
     - 美联储信号: 随机模拟
 """)
