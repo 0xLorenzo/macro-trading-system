@@ -11,7 +11,7 @@ st.set_page_config(page_title="宏观交易系统 V13", layout="wide")
 st.markdown("""
 <div style="background-color:#8B8C89;padding:12px;border-radius:6px;text-align:center;color:white">
 <h1>🌌 宏观交易策略系统 V13</h1>
-<p>CG专用</p>
+<p>DZ</p>
 </div>
 """, unsafe_allow_html=True)
 
