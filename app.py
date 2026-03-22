@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 import requests
 
-st.set_page_config(page_title="宏观交易系统 V8 美化版", layout="wide")
+st.set_page_config(page_title="宏观交易系统 V8", layout="wide")
 
 # ---------- 顶部 Banner ----------
 st.markdown("""
@@ -32,7 +32,7 @@ def get_sp500_history():
 def get_gold_history():
     try:
         import yfinance as yf
-        df = yf.download("GC=F", period="6mo")  # 黄金期货
+        df = yf.download("GC=F", period="6mo")
         if df.empty:
             return pd.DataFrame()
         col = "Adj Close" if "Adj Close" in df.columns else "Close"
@@ -65,7 +65,7 @@ def safe_latest(df, col_name):
     val = df[col_name].iloc[-1]
     try:
         val = float(val)
-        return None if np.isnan(val) else round(val, 2)  # 保留两位小数
+        return None if np.isnan(val) else round(val,2)
     except:
         return None
 
@@ -104,12 +104,21 @@ with col1:
 with col2:
     st.subheader("📊 历史趋势对比")
     series_list = []
+
     if not sp500_hist.empty:
-        series_list.append(sp500_hist["SP500"].copy().rename("SP500"))
+        s = sp500_hist["SP500"].copy()
+        s.name = "SP500"
+        series_list.append(s)
+
     if not gold_hist.empty:
-        series_list.append(gold_hist["黄金"].copy().rename("黄金"))
+        s = gold_hist["黄金"].copy()
+        s.name = "黄金"
+        series_list.append(s)
+
     if not btc_hist.empty:
-        series_list.append(btc_hist["BTC"].copy().rename("BTC"))
+        s = btc_hist["BTC"].copy()
+        s.name = "BTC"
+        series_list.append(s)
 
     if series_list:
         chart_df = pd.concat(series_list, axis=1).dropna()
