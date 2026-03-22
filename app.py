@@ -2,14 +2,15 @@ import streamlit as st
 import pandas as pd
 import numpy as np
 import requests
+import plotly.express as px
 
-st.set_page_config(page_title="宏观交易系统 V8", layout="wide")
+st.set_page_config(page_title="宏观交易系统 V8 对数指标版", layout="wide")
 
 # ---------- 顶部 Banner ----------
 st.markdown("""
 <div style="background-color:#1E3A8A;padding:15px;border-radius:8px;text-align:center;color:white">
 <h1>🌍 宏观交易策略系统 V8</h1>
-<p>实时获取 SP500、黄金、BTC 历史数据，生成动态资产配置策略。</p>
+<p>实时获取 SP500、黄金、BTC 历史数据，生成动态资产配置策略（对数指标展示历史趋势）。</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -102,7 +103,7 @@ with col1:
     st.caption("随机模拟信号，可升级为 CME FedWatch 实时概率")
 
 with col2:
-    st.subheader("📊 历史趋势对比")
+    st.subheader("📊 历史趋势对比（对数指标）")
     series_list = []
 
     if not sp500_hist.empty:
@@ -122,10 +123,17 @@ with col2:
 
     if series_list:
         chart_df = pd.concat(series_list, axis=1).dropna()
-        st.line_chart(chart_df)
+        # 对数化绘图
+        chart_df_log = np.log(chart_df)
+
+        fig = px.line(chart_df_log, x=chart_df_log.index, y=chart_df_log.columns,
+                      labels={"value":"对数价格", "date":"日期"}, 
+                      title="近 6 个月 SP500 / 黄金 / BTC 历史趋势 (对数指标)")
+        st.plotly_chart(fig, use_container_width=True)
+
         download_csv = chart_df.reset_index().to_csv(index=False).encode('utf-8')
         st.download_button("📥 下载历史行情 CSV", download_csv, "market_history.csv")
-        st.caption("折线图显示近 6 个月 SP500、黄金、BTC 收盘价对比")
+        st.caption("折线图显示近 6 个月 SP500、黄金、BTC 收盘价对比（对数指标）")
     else:
         st.warning("没有可用历史数据显示折线图")
 
