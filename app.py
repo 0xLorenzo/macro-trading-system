@@ -1,7 +1,6 @@
 import streamlit as st
 import pandas as pd
 import requests
-import datetime
 import numpy as np
 import os
 
@@ -27,9 +26,13 @@ def get_sp500_history():
         r = requests.get(url).json()
         if "Time Series (Daily)" not in r:
             st.warning("Alpha Vantage 数据不可用或超限，自动切换至 Yahoo Finance")
-            import yfinance as yf
-            df = yf.download("SPY", period="3mo")[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
-            return df
+            try:
+                import yfinance as yf
+                df = yf.download("SPY", period="3mo")[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
+                return df
+            except ModuleNotFoundError:
+                st.error("yfinance 未安装，无法 fallback 获取 SP500 数据")
+                return pd.DataFrame()
         df = pd.DataFrame(r["Time Series (Daily)"]).T
         df = df.rename(columns={"5. adjusted close":"SPY"})
         df.index = pd.to_datetime(df.index)
@@ -37,9 +40,13 @@ def get_sp500_history():
         return df[["SPY"]]
     except Exception as e:
         st.warning(f"获取 SP500 数据失败: {e}, 自动切换至 Yahoo Finance")
-        import yfinance as yf
-        df = yf.download("SPY", period="3mo")[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
-        return df
+        try:
+            import yfinance as yf
+            df = yf.download("SPY", period="3mo")[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
+            return df
+        except ModuleNotFoundError:
+            st.error("yfinance 未安装，无法 fallback 获取 SP500 数据")
+            return pd.DataFrame()
 
 sp500_hist = get_sp500_history()
 
@@ -76,9 +83,9 @@ def get_btc_history():
 btc_hist = get_btc_history()
 
 # ---------- 最新行情 ----------
-latest_spy = sp500_hist["SPY"].iloc[-1]
-latest_gold = gold_hist["XAUUSD"].iloc[-1]
-latest_btc = btc_hist["BTC"].iloc[-1]
+latest_spy = sp500_hist["SPY"].iloc[-1] if not sp500_hist.empty else None
+latest_gold = gold_hist["XAUUSD"].iloc[-1] if not gold_hist.empty else None
+latest_btc = btc_hist["BTC"].iloc[-1] if not btc_hist.empty else None
 
 # ---------- 美联储自动信号 ----------
 @st.cache_data(ttl=3600)
@@ -107,20 +114,21 @@ with col1:
 with col2:
     st.subheader("📊 历史趋势对比")
     chart_df = pd.concat([
-        sp500_hist["SPY"].rename("SP500"),
-        gold_hist["XAUUSD"].rename("黄金"),
-        btc_hist["BTC"].rename("BTC")
+        sp500_hist["SPY"].rename("SP500") if not sp500_hist.empty else pd.Series(),
+        gold_hist["XAUUSD"].rename("黄金") if not gold_hist.empty else pd.Series(),
+        btc_hist["BTC"].rename("BTC") if not btc_hist.empty else pd.Series()
     ], axis=1).dropna()
     st.line_chart(chart_df)
 
 # 下载 CSV
-download_csv = chart_df.reset_index().to_csv(index=False).encode('utf-8')
-st.download_button("📥 下载历史行情 CSV", download_csv, "market_history.csv")
+if not chart_df.empty:
+    download_csv = chart_df.reset_index().to_csv(index=False).encode('utf-8')
+    st.download_button("📥 下载历史行情 CSV", download_csv, "market_history.csv")
 
 # ---------- 资产配置策略 ----------
 def alloc_model(o, dxy, fed, btc_vol):
     gold = 25; stocks = 40; btc = 20; cash = 15
-    if o > latest_gold: gold += 5; stocks -= 5
+    if o and o > latest_gold: gold += 5; stocks -= 5
     if fed == "鸽派": stocks += 5; btc += 5
     if fed == "鹰派": stocks -= 5; gold += 5
     return {"黄金": gold, "美股": stocks, "BTC": btc, "现金": cash}
