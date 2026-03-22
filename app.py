@@ -149,18 +149,30 @@ def alloc_model(latest_gold_val, latest_sp500_val, fed_signal, btc_vol):
     # ---------- 黄金动态调整 ----------
     if latest_gold_val is not None and gold_thresh is not None:
         mean, std = gold_thresh
-        if mean is not None and std is not None:
-            if latest_gold_val > mean + std:
-                gold += 5
-                stocks -= 5
+        try:
+            latest_gold_val_f = float(latest_gold_val)
+            mean_f = float(mean)
+            std_f = float(std)
+            if not any(np.isnan([latest_gold_val_f, mean_f, std_f])):
+                if latest_gold_val_f > mean_f + std_f:
+                    gold += 5
+                    stocks -= 5
+        except:
+            pass
 
     # ---------- SP500动态调整 ----------
     if latest_sp500_val is not None and sp500_thresh is not None:
         mean, std = sp500_thresh
-        if mean is not None and std is not None:
-            if latest_sp500_val > mean + std:
-                stocks += 5
-                gold -= 5
+        try:
+            latest_sp500_val_f = float(latest_sp500_val)
+            mean_f = float(mean)
+            std_f = float(std)
+            if not any(np.isnan([latest_sp500_val_f, mean_f, std_f])):
+                if latest_sp500_val_f > mean_f + std_f:
+                    stocks += 5
+                    gold -= 5
+        except:
+            pass
 
     # ---------- 美联储信号调整 ----------
     if fed_signal == "鸽派":
