@@ -68,10 +68,23 @@ def get_btc_history():
 
 btc_hist = get_btc_history()
 
-# ---------- 最新行情 ----------
-latest_spy = sp500_hist["SPY"].iloc[-1] if not sp500_hist.empty else None
-latest_gold = gold_hist["XAUUSD"].iloc[-1] if not gold_hist.empty else None
-latest_btc = btc_hist["BTC"].iloc[-1] if not btc_hist.empty else None
+# ---------- 安全获取最新价格 ----------
+def safe_latest(df, col_name):
+    """返回单一 float 值，如果为空或 NaN 返回 None"""
+    if df.empty or col_name not in df.columns:
+        return None
+    val = df[col_name].iloc[-1]
+    try:
+        val = float(val)
+        if np.isnan(val):
+            return None
+        return val
+    except:
+        return None
+
+latest_spy = safe_latest(sp500_hist, "SPY")
+latest_gold = safe_latest(gold_hist, "XAUUSD")
+latest_btc = safe_latest(btc_hist, "BTC")
 
 # ---------- 美联储随机信号 ----------
 @st.cache_data(ttl=3600)
@@ -133,12 +146,16 @@ def alloc_model(latest_gold_val, latest_spy_val, fed_signal, btc_vol):
     btc = 20
     cash = 15
 
-    # 安全判断，避免 ValueError
-    if latest_gold_val is not None and not pd.isna(latest_gold_val):
-        # 简单示例：黄金价格高于1800微调
+    # 仅在值存在时才做比较
+    if latest_gold_val is not None:
         if latest_gold_val > 1800:
             gold += 5
             stocks -= 5
+
+    if latest_spy_val is not None:
+        if latest_spy_val > 450:
+            stocks += 5
+            gold -= 5
 
     if fed_signal == "鸽派":
         stocks += 5
