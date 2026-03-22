@@ -4,39 +4,18 @@ import requests
 import numpy as np
 import os
 
-st.set_page_config(page_title="宏观交易系统 V7 自动稳定版", layout="wide")
+st.set_page_config(page_title="宏观交易系统 V7 全稳定版", layout="wide")
 
 st.markdown("""
 <h1 style='text-align:center;color:#1E3A8A;'>🌍 AI 宏观交易策略系统 V7</h1>
 <p style='text-align:center;color:#555;font-size:14px;'>
-自动获取美股/黄金/BTC历史行情、自动生成策略及趋势分析。
+自动获取美股/黄金/BTC历史行情、自动生成策略及趋势分析（不依赖 Alpha Vantage）。
 </p>
 """, unsafe_allow_html=True)
-
-# ---------- API Key ----------
-ALPHA_KEY = st.secrets.get("ALPHA_VANTAGE_API_KEY")
-if not ALPHA_KEY:
-    st.error("API Key 未设置，请在 Streamlit Secrets 中添加 ALPHA_VANTAGE_API_KEY")
 
 # ---------- 获取 SP500 历史数据 ----------
 @st.cache_data(ttl=3600)
 def get_sp500_history():
-    try:
-        url = f"https://www.alphavantage.co/query?function=TIME_SERIES_DAILY_ADJUSTED&symbol=SPY&apikey={ALPHA_KEY}"
-        r = requests.get(url).json()
-        ts = r.get("Time Series (Daily)")
-        if ts:
-            df = pd.DataFrame(ts).T
-            df = df.rename(columns={"5. adjusted close":"SPY"})
-            df.index = pd.to_datetime(df.index)
-            df["SPY"] = df["SPY"].astype(float)
-            return df[["SPY"]]
-        else:
-            st.warning("Alpha Vantage 数据不可用或超限，自动尝试 Yahoo Finance")
-    except Exception as e:
-        st.warning(f"Alpha Vantage 请求失败: {e}, 尝试 Yahoo Finance")
-
-    # fallback Yahoo Finance
     try:
         import yfinance as yf
         df = yf.download("SPY", period="3mo")
@@ -46,10 +25,10 @@ def get_sp500_history():
         df = df[["Adj Close"]].rename(columns={"Adj Close":"SPY"})
         return df
     except ModuleNotFoundError:
-        st.error("yfinance 未安装，无法 fallback 获取 SP500 数据")
+        st.error("yfinance 未安装，无法获取 SP500 数据")
         return pd.DataFrame()
     except Exception as e:
-        st.error(f"Yahoo Finance 获取失败: {e}")
+        st.error(f"Yahoo Finance 获取 SP500 失败: {e}")
         return pd.DataFrame()
 
 sp500_hist = get_sp500_history()
@@ -58,20 +37,16 @@ sp500_hist = get_sp500_history()
 @st.cache_data(ttl=3600)
 def get_gold_history():
     try:
-        url = f"https://www.alphavantage.co/query?function=FX_DAILY&from_symbol=XAU&to_symbol=USD&apikey={ALPHA_KEY}"
-        r = requests.get(url).json()
-        ts = r.get("Time Series FX (Daily)")
-        if ts:
-            df = pd.DataFrame(ts).T
-            df.index = pd.to_datetime(df.index)
-            df["XAUUSD"] = df["4. close"].astype(float)
-            return df[["XAUUSD"]]
-        else:
-            st.warning("Alpha Vantage 黄金数据不可用，使用 SPY 代替测试")
-            return sp500_hist.copy().rename(columns={"SPY":"XAUUSD"})
-    except:
-        st.warning("获取黄金数据失败，使用 SPY 代替")
-        return sp500_hist.copy().rename(columns={"SPY":"XAUUSD"})
+        import yfinance as yf
+        df = yf.download("GC=F", period="3mo")  # 黄金期货
+        if df.empty or "Adj Close" not in df.columns:
+            st.error("Yahoo Finance 黄金数据为空或无 'Adj Close' 列")
+            return pd.DataFrame()
+        df = df[["Adj Close"]].rename(columns={"Adj Close":"XAUUSD"})
+        return df
+    except Exception as e:
+        st.error(f"Yahoo Finance 获取黄金失败: {e}")
+        return pd.DataFrame()
 
 gold_hist = get_gold_history()
 
